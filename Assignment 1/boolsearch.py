@@ -57,6 +57,27 @@ def bin_to_dec(n):
     return int(n, 2)
 
 
+def c0_encode(x):
+    binary = dec_to_binary(x)
+    binary = binary.zfill(32)
+    return binary
+
+
+def c0_encode_list(arr):
+    temp = []
+    for e in arr:
+        temp.append(c0_encode(e))
+    return "".join(temp)
+
+
+def c0_decode(data):
+    allbin = chunkstring(data, 32)
+    temp = []
+    for e in allbin:
+        temp.append(bin_to_dec(e))
+    return temp
+
+
 # performs vb encoding on a number and returns a list of chunks of size 8
 def vbencode_number(number):
     bytes_list = []
@@ -131,7 +152,7 @@ def c2_encode_list(arr):
     return ans
 
 
-# does c3 decoding on a list of numbers
+# does c2 decoding on a list of numbers
 def c2_decode(x):
     i = 0
     n = len(x)
@@ -151,6 +172,18 @@ def c2_decode(x):
         num = bin_to_dec(num_bin)
         res.append(num)
     return res
+
+
+def c3encodehelper(arr):
+    temp = []
+    for e in arr:
+        temp.append(str(e))
+    return ",".join(temp)
+
+
+def c3decodehelper(string):
+    ans = string.split(",")
+    return list(map(int, ans))
 
 
 # does C4 encoding on x using k as param, returns string
@@ -206,6 +239,26 @@ def padding(x):
     return '0'*(8-n) + x
 
 
+# get posting list using C0
+def getPostings_C0(tokens,):
+    for token in tokens:
+        if token not in dictionary:
+            return []
+    res = []
+    for token in tokens:
+        start = dictionary[token][0]
+        sz = dictionary[token][1]
+        f.seek(start)
+        allbytes = ''
+        for i in range(0, sz):
+            temp = f.read(1)
+            val = int.from_bytes(temp, "big")
+            allbytes += padding(dec_to_binary(val))
+        doclist = c0_decode(allbytes)
+        res.append(undoGapEncode(doclist))
+    return res
+
+
 # get posting list using C1
 def getPostings_C1(tokens):
     for token in tokens:
@@ -256,17 +309,14 @@ def getPostings_C3(tokens):
         if token not in dictionary:
             return []
     res = []
-    encoded = f.read()
-    decoded = snappy.decompress(encoded)
-    binlist = []
-    for x in list(decoded):
-        binlist.append(padding(dec_to_binary(x)))
-    fullstr = "".join(binlist)
     for token in tokens:
-        start = dictionary[token][0]+orig_offset
+        start = dictionary[token][0]
         end = start + dictionary[token][1]
-        subset = fullstr[start:end]
-        docList = c2_decode(subset)
+        subset = decoded[start:end]
+        subset = str(subset)
+        subset = subset.replace("b'", "")
+        subset = subset.replace("'", "")
+        docList = c3decodehelper(subset)
         res.append(undoGapEncode(docList))
     return res
 
@@ -328,7 +378,6 @@ if __name__ == "__main__":
     compression = tempdict["compression"]
     dictionary = tempdict["dictionary"]
     int_to_docID = tempdict["int_to_docID"]
-    orig_offset = tempdict["orig_offset"]
 
     f = open(indexfile, "rb")
 
@@ -337,8 +386,14 @@ if __name__ == "__main__":
 
     res_file = open(resultfile, "w")
 
+    if compression == 3:
+        encoded = f.read()
+        decoded = snappy.decompress(encoded)
+
     for qid, line in enumerate(lines):
-        if compression == 1:
+        if compression == 0:
+            postings = getPostings_C0(getTokensFromText(line))
+        elif compression == 1:
             postings = getPostings_C1(getTokensFromText(line))
         elif compression == 2:
             postings = getPostings_C2(getTokensFromText(line))

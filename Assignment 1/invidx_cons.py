@@ -194,6 +194,47 @@ def bin_to_dec(n):
     return int(n, 2)
 
 
+def c0_encode(x):
+    binary = dec_to_binary(x)
+    binary = binary.zfill(32)
+    return binary
+
+
+def c0_encode_list(arr):
+    temp = []
+    for e in arr:
+        temp.append(c0_encode(e))
+    return "".join(temp)
+
+
+def c0_decode(data):
+    allbin = chunkstring(data, 32)
+    temp = []
+    for e in allbin:
+        temp.append(bin_to_dec(e))
+    return temp
+
+
+def dumpFiles_C0(invidx):
+    dictionary = {}
+    fname = indexfile + '.idx'
+    file = open(fname, "wb")
+    offset = 0
+    for term, posting_list in invidx.items():
+        allbytes = c0_encode_list(posting_list)
+        sz = len(allbytes)
+        chunks = chunkstring(allbytes, 8)
+        temp = []
+        for chunk in chunks:
+            temp.append(bin_to_dec(chunk))
+        file.write(bytearray(temp))
+        length = len(chunks)
+        dictionary[term] = [offset, length]
+        offset += length
+    file.close()
+    return dictionary
+
+
 # performs vb encoding on a number and returns a list of chunks of size 8
 def vbencode_number(number):
     bytes_list = []
@@ -318,9 +359,10 @@ def dumpFiles_C2(invidx):
     for term, posting_list in invidx.items():
         allbytes = c2_encode_list(posting_list)
         sz = len(allbytes)
+        skipbits = 0
         if(sz % 8 != 0):
             allbytes = '0'*(8-sz % 8) + allbytes
-        skipbits = (8-sz % 8)
+            skipbits = (8-sz % 8)
         chunks = chunkstring(allbytes, 8)
         temp = []
         for chunk in chunks:
@@ -338,6 +380,18 @@ def chunkstring(string, length):
     return [string[0+i:length+i] for i in range(0, len(string), length)]
 
 
+def c3encodehelper(arr):
+    temp = []
+    for e in arr:
+        temp.append(str(e))
+    return ",".join(temp)
+
+
+def c3decodehelper(string):
+    ans = string.split(",")
+    return list(map(int, ans))
+
+
 # makes posting list file for C3 compression
 def dumpFiles_C3(invidx):
     dictionary = {}
@@ -345,24 +399,17 @@ def dumpFiles_C3(invidx):
     file = open(fname, "wb")
     offset = 0
     cont = []
-    for term, posting_list in tqdm(invidx.items()):
-        temp = c2_encode_list(posting_list)
-        invidx[term] = []
+    for term, posting_list in invidx.items():
+        temp = c3encodehelper(posting_list)
         cont.append(temp)
+        invidx[term] = []
         length = len(temp)
         dictionary[term] = [offset, length]
         offset += length
     allbytes = "".join(cont)
-    sz = len(allbytes)
-    if(sz % 8 != 0):
-        allbytes = '0'*(8-sz % 8) + allbytes
-    chunks = chunkstring(allbytes, 8)
-    temp = []
-    for chunk in chunks:
-        temp.append(bin_to_dec(chunk))
-    file.write(snappy.compress(bytearray(temp)))
+    file.write(snappy.compress(allbytes))
     file.close()
-    return dictionary, (8-sz % 8)
+    return dictionary
 
 
 # does C4 encoding on x using k as param, returns string
@@ -436,7 +483,7 @@ def dumpFiles_C4(invidx):
 def dumpDicts(dictionary, int_to_docID):
     fname = indexfile + '.dict'
     with open(fname, "w") as outfile:
-        res = {"compression": compression, "orig_offset": orig_offset, "dictionary": dictionary, "int_to_docID": int_to_docID}
+        res = {"compression": compression, "dictionary": dictionary, "int_to_docID": int_to_docID}
         json.dump(res, outfile)
 
 
@@ -464,14 +511,14 @@ if __name__ == "__main__":
 
     invidx = doGapEncoding(invidx)
 
-    orig_offset = 0
-
-    if compression == 0 or compression == 1:
+    if compression == 0:
+        dictionary = dumpFiles_C0(invidx)
+    elif compression == 1:
         dictionary = dumpFiles_C1(invidx)
     elif compression == 2:
         dictionary = dumpFiles_C2(invidx)
     elif compression == 3:
-        dictionary, orig_offset = dumpFiles_C3(invidx)
+        dictionary = dumpFiles_C3(invidx)
     elif compression == 4:
         dictionary = dumpFiles_C4(invidx)
 
