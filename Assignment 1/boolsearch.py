@@ -211,11 +211,30 @@ def c4_encode_list(arr, k):
 
 # does C4 decoding with numbits given
 def c4_decode_withpad(stream, k, numbits):
+    if(len(stream) < numbits):
+        print("wow")
     i = 0
     b = pow(2, k)
     res = []
+    if k == 0:
+        num_bits_in_one = 2
+    else:
+        num_bits_in_one = k+1
     while(i < numbits):
+        while(True):
+            if(i+num_bits_in_one-1 < numbits):
+                if(stream[i:i+num_bits_in_one] == ("0"*num_bits_in_one)):
+                    res.append(1)
+                    i += num_bits_in_one
+                else:
+                    break
+            else:
+                break
+        if(i >= numbits):
+            break
         q = 0
+        # print(k, stream, numbits)
+        # print(k, stream[i:])
         while(stream[i] != '0'):
             q += 1
             i += 1
@@ -331,12 +350,10 @@ def getPostings_C4(tokens):
         start = dictionary[token][0]
         numbits = dictionary[token][1]
         k = dictionary[token][2]
+        totallen = dictionary[token][3]
         f.seek(start)
         allbytes = ''
-        numiter = numbits
-        numiter += (numiter % 8)
-        numiter = int(numiter/8)
-        for i in range(0, numiter):
+        for i in range(0, totallen):
             temp = f.read(1)
             val = int.from_bytes(temp, "big")
             allbytes += padding(dec_to_binary(val))
@@ -347,6 +364,8 @@ def getPostings_C4(tokens):
 
 # find list of common docs from multiple lists
 def getIntersection(postings):
+    if len(postings) == 0:
+        return []
     ans = postings[0]
     for posting in postings:
         tempans = []

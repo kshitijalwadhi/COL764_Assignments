@@ -12,9 +12,10 @@ import time
 ps = PorterStemmer()
 
 delim = '''[ ',(){}.:;"’`\n]'''
+FILES_PER_SPLIT = 100
 
 
-# returns tokens after stemming in the form of a list
+# returns tokens after stemming in the form of a list (CHECKED)
 def getTokensFromText(text):
     words = re.split(delim, text)
     res = []
@@ -24,23 +25,22 @@ def getTokensFromText(text):
     return res
 
 
-# returns a dictionary containing stopwords
+# returns a dictionary containing stopwords (CHECKED)
 def processStopwords(filepath):
     stopwords = {}
     text = ''
     file = open(filepath, "r")
     lines = file.readlines()
-    for line in lines:
-        text += (line + " ")
+    # for line in lines:
+    #     text += (line + " ")
+    text = " ".join(lines)
     res = re.split(delim, text)
     temp = []
     for w in res:
         if len(w) > 0:
-            temp.append(w.lower())
-    res = temp
-    for w in res:
-        stopwords[w] = 1
-    return stopwords
+            temp.append(ps.stem(w.lower(), 0, len(w)-1))
+    res = set(temp)
+    return res
 
 
 # check if word present in stopwords
@@ -56,8 +56,9 @@ def getXMLtags(filepath):
     file = open(filepath, "r")
     lines = file.readlines()
     text = ''
-    for line in lines:
-        text += (line + " ")
+    # for line in lines:
+    #     text += (line + " ")
+    text = " ".join(lines)
     res = re.split(delim, text)
     temp = []
     for w in res:
@@ -67,12 +68,36 @@ def getXMLtags(filepath):
     return res
 
 
+def process_directory(dir_path, filearr):
+    data = {}
+    for filename in tqdm(filearr):
+        full_path = os.path.join(dir_path, filename)
+        file = open(full_path, "r")
+        contents = file.read()
+        soup = BeautifulSoup(contents, 'html.parser')
+        docs = soup.find_all('doc')
+
+        for doc in docs:
+            docnum = doc.find(xmlTags[0]).get_text().strip()
+            res = []
+            for tag in xmlTags:
+                if tag == xmlTags[0]:
+                    continue
+                fields = doc.find_all(tag)
+                for field in fields:
+                    text = field.get_text()
+                    words = re.split(delim, text)
+                    for w in words:
+                        if(len(w) > 0):
+                            res.append(ps.stem(w.lower(), 0, len(w)-1))
+            data[docnum] = res
+    return data
+
+
 # maps docnum to list of tokens for all files in directory
-def process_directory(dir_path):
+def process_directory_old(dir_path):
     data = {}
     for filename in tqdm(os.listdir(dir_path)):
-        # if filename == "ap890520":
-        #     continue
         full_path = os.path.join(dir_path, filename)
         file = open(full_path, "r")
         contents = file.read()
@@ -97,7 +122,18 @@ def process_directory(dir_path):
 
 
 # gets vocabulary from the data and returns it in the form of a set
-def getVocab(data, stopwords):
+def getVocab(vocab, data, stopwords):
+    tokens = []
+    for doc, token_list in data.items():
+        tokens += token_list
+    tokens = set(tokens)
+    for w in stopwords:
+        tokens.discard(w)
+    vocab.update(tokens)
+    return vocab
+
+
+def getVocab_old(data, stopwords):
     tokens = []
     for doc, token_list in data.items():
         tokens += token_list
@@ -108,7 +144,15 @@ def getVocab(data, stopwords):
 
 
 # takes a list of document names and maps them to integers and returns the map
-def mapDocIDs(docIDs):
+def mapDocIDs(docIDs, numdocs):
+    for doc in docIDs:
+        docID_to_int[doc] = numdocs
+        int_to_docID[numdocs] = doc
+        numdocs += 1
+    return numdocs
+
+
+def mapDocIDs_old(docIDs):
     docID_to_int = {}
     int_to_docID = {}
     i = 1
@@ -131,19 +175,8 @@ def makeDocIdMap(full_path):
     return mapDocIDs(docIDs)
 
 
-# generates inverted index from the given data
-def getInvIdx(data):
-    invidx = {}
-    for doc, token_list in data.items():
-        doc = docID_to_int[doc]
-        for token in token_list:
-            if token in vocab:
-                if token in invidx.keys():
-                    if(invidx[token][-1] != doc):
-                        invidx[token].append(doc)
-                else:
-                    invidx[token] = [doc]
-    return invidx
+def chunks(l, n):
+    return [l[i:i + n] for i in range(0, len(l), n)]
 
 
 # generates inverted index from the given data
@@ -215,13 +248,21 @@ def c0_decode(data):
     return temp
 
 
-def dumpFiles_C0(invidx):
+def dumpFiles_C0():
     dictionary = {}
+    alldicts = loadDictFiles()
+    allidx = loadBinFiles()
     fname = indexfile + '.idx'
     file = open(fname, "wb")
     offset = 0
-    for term, posting_list in invidx.items():
-        allbytes = c0_encode_list(posting_list)
+    for w in vocab:
+        postings = []
+        for i, tempdict in enumerate(alldicts):
+            if w in tempdict:
+                reader = allidx[i]
+                postings.extend(getPosting(reader, w, alldicts[i]))
+        postings = gapEncodeList(postings)
+        allbytes = c0_encode_list(postings)
         sz = len(allbytes)
         chunks = chunkstring(allbytes, 8)
         temp = []
@@ -229,9 +270,10 @@ def dumpFiles_C0(invidx):
             temp.append(bin_to_dec(chunk))
         file.write(bytearray(temp))
         length = len(chunks)
-        dictionary[term] = [offset, length]
+        dictionary[w] = [offset, length]
         offset += length
     file.close()
+    closeBinFiles(allidx)
     return dictionary
 
 
@@ -249,8 +291,9 @@ def vbencode_number(number):
     temp = []
     for num in bytes_list:
         temp.append(dec_to_binary(num))
-    app = 8 - len(temp[-1])
-    temp[-1] = '0'*app + temp[-1]
+    #app = 8 - len(temp[-1])
+    #temp[-1] = '0'*app + temp[-1]
+    temp[-1] = temp[-1].zfill(8)
     return temp
 
 
@@ -278,21 +321,30 @@ def vbdecode(stream):
 
 
 # makes posting list file for C1 compression
-def dumpFiles_C1(invidx):
+def dumpFiles_C1():
     dictionary = {}
+    alldicts = loadDictFiles()
+    allidx = loadBinFiles()
     fname = indexfile + '.idx'
     file = open(fname, "wb")
     offset = 0
-    for term, posting_list in invidx.items():
-        encoded = vbencode(posting_list)
+    for w in vocab:
+        postings = []
+        for i, tempdict in enumerate(alldicts):
+            if w in tempdict:
+                reader = allidx[i]
+                postings.extend(getPosting(reader, w, alldicts[i]))
+        postings = gapEncodeList(postings)
+        encoded = vbencode(postings)
         temp = []
         for enc in encoded:
             temp.append(bin_to_dec(enc))
         file.write(bytearray(temp))
         length = len(temp)
-        dictionary[term] = [offset, length]
+        dictionary[w] = [offset, length]
         offset += length
     file.close()
+    closeBinFiles(allidx)
     return dictionary
 
 
@@ -323,8 +375,11 @@ def c2_encoding(x):
 # does c2 encoding on a list of numbers
 def c2_encode_list(arr):
     ans = ''
+    temp = []
     for e in arr:
-        ans += c2_encoding(e)
+        #ans += c2_encoding(e)
+        temp.append(c2_encoding(e))
+    ans = "".join(temp)
     return ans
 
 
@@ -351,13 +406,21 @@ def c2_decode(x):
 
 
 # makes posting list file for C2 compression
-def dumpFiles_C2(invidx):
+def dumpFiles_C2():
     dictionary = {}
+    alldicts = loadDictFiles()
+    allidx = loadBinFiles()
     fname = indexfile + '.idx'
     file = open(fname, "wb")
     offset = 0
-    for term, posting_list in invidx.items():
-        allbytes = c2_encode_list(posting_list)
+    for w in vocab:
+        postings = []
+        for i, tempdict in enumerate(alldicts):
+            if w in tempdict:
+                reader = allidx[i]
+                postings.extend(getPosting(reader, w, alldicts[i]))
+        postings = gapEncodeList(postings)
+        allbytes = c2_encode_list(postings)
         sz = len(allbytes)
         skipbits = 0
         if(sz % 8 != 0):
@@ -369,8 +432,9 @@ def dumpFiles_C2(invidx):
             temp.append(bin_to_dec(chunk))
         file.write(bytearray(temp))
         length = len(chunks)
-        dictionary[term] = [offset, length, skipbits]
+        dictionary[w] = [offset, length, skipbits]
         offset += length
+    closeBinFiles(allidx)
     file.close()
     return dictionary
 
@@ -430,8 +494,11 @@ def c4_encoding(x, k):
 # does C4 encoding on a list
 def c4_encode_list(arr, k):
     ans = ''
+    temp = []
     for e in arr:
-        ans += c4_encoding(e, k)
+        #ans += c4_encoding(e, k)
+        temp.append(c4_encoding(e, k))
+    ans = "".join(temp)
     return ans
 
 
@@ -440,7 +507,22 @@ def c4_decode_withpad(stream, k, numbits):
     i = 0
     b = pow(2, k)
     res = []
+    if k == 0:
+        num_bits_in_one = 2
+    else:
+        num_bits_in_one = k+1
     while(i < numbits):
+        while(True):
+            if(i+num_bits_in_one-1 < numbits):
+                if(stream[i:i+num_bits_in_one] == ("0"*num_bits_in_one)):
+                    res.append(1)
+                    i += num_bits_in_one
+                else:
+                    break
+            else:
+                break
+        if(i >= numbits):
+            break
         q = 0
         while(stream[i] != '0'):
             q += 1
@@ -456,15 +538,23 @@ def c4_decode_withpad(stream, k, numbits):
 
 
 # Makes posting list file for C4 compression
-def dumpFiles_C4(invidx):
+def dumpFiles_C4():
     dictionary = {}
+    alldicts = loadDictFiles()
+    allidx = loadBinFiles()
     fname = indexfile + '.idx'
     file = open(fname, "wb")
     offset = 0
-    for term, posting_list in invidx.items():
-        maxm = posting_list[-1]
+    for w in vocab:
+        postings = []
+        for i, tempdict in enumerate(alldicts):
+            if w in tempdict:
+                reader = allidx[i]
+                postings.extend(getPosting(reader, w, alldicts[i]))
+        postings = gapEncodeList(postings)
+        maxm = max(postings)
         k = int(math.log2(maxm))
-        allbytes = c4_encode_list(posting_list, k)
+        allbytes = c4_encode_list(postings, k)
         numbits = len(allbytes)
         if(numbits % 8 != 0):
             allbytes = allbytes + '0'*(8-numbits % 8)
@@ -473,8 +563,9 @@ def dumpFiles_C4(invidx):
         for chunk in chunks:
             temp.append(bin_to_dec(chunk))
         file.write(bytearray(temp))
-        dictionary[term] = [offset, numbits, k]
+        dictionary[w] = [offset, numbits, k, len(temp)]
         offset += len(temp)
+    closeBinFiles(allidx)
     file.close()
     return dictionary
 
@@ -485,6 +576,79 @@ def dumpDicts(dictionary, int_to_docID):
     with open(fname, "w") as outfile:
         res = {"compression": compression, "dictionary": dictionary, "int_to_docID": int_to_docID}
         json.dump(res, outfile)
+
+
+def padding(x):
+    #n = len(x)
+    # return '0'*(8-n) + x
+    return x.zfill(8)
+
+
+# makes posting list file using C2 compression
+def dumpINV(invidx, i):
+    dictionary = {}
+    fname = os.path.join("tempfiles", f"index{i}.idx")
+    file = open(fname, "wb")
+    offset = 0
+    for term, posting_list in invidx.items():
+        allbytes = c2_encode_list(posting_list)
+        sz = len(allbytes)
+        skipbits = 0
+        if(sz % 8 != 0):
+            allbytes = '0'*(8-sz % 8) + allbytes
+            skipbits = (8-sz % 8)
+        chunks = chunkstring(allbytes, 8)
+        temp = []
+        for chunk in chunks:
+            temp.append(bin_to_dec(chunk))
+        file.write(bytearray(temp))
+        length = len(chunks)
+        dictionary[term] = [offset, length, skipbits]
+        offset += length
+    file.close()
+    return dictionary
+
+
+# get posting list using C2
+def getPosting(reader, token, tempdict):
+    start = tempdict[token][0]
+    sz = tempdict[token][1]
+    skipbits = tempdict[token][2]
+    reader.seek(start)
+    allbytes = ''
+    vararr = []
+    for i in range(0, sz):
+        temp = reader.read(1)
+        val = int.from_bytes(temp, "big")
+        #allbytes += padding(dec_to_binary(val))
+        vararr.append(padding(dec_to_binary(val)))
+    allbytes = "".join(vararr)
+    i = skipbits
+    allbytes = allbytes[i:]
+    doclist = c2_decode(allbytes)
+    return undoGapEncode(doclist)
+
+
+def loadDictFiles():
+    res = []
+    for i in range(numfiles):
+        with open(os.path.join("tempfiles", f"dict{i}.json"), "r") as jsonfile:
+            tempinvidx = json.load(jsonfile)
+            res.append(tempinvidx)
+    return res
+
+
+def loadBinFiles():
+    res = []
+    for i in range(numfiles):
+        f = open(os.path.join("tempfiles", f"index{i}.idx"), "rb")
+        res.append(f)
+    return res
+
+
+def closeBinFiles(allidx):
+    for i in range(numfiles):
+        allidx[i].close()
 
 
 if __name__ == "__main__":
@@ -498,29 +662,53 @@ if __name__ == "__main__":
 
     stopwords = processStopwords(stopwordfile)
     xmlTags = getXMLtags(xmltagsinfo)
-    data = process_directory(coll_path)
 
-    print(f"Processed data. {time.time() - start} since start")
+    if compression == 3:
+        data = process_directory_old(coll_path)
+        print(f"Processed data. {time.time() - start} since start")
 
-    docID_to_int, int_to_docID = mapDocIDs(data)
-    vocab = getVocab(data, stopwords)
+        docID_to_int, int_to_docID = mapDocIDs_old(data)
+        vocab = getVocab_old(data, stopwords)
 
-    invidx = getInvIdx(data)
-    del data
-    print(f"Created Inverted Index. {time.time() - start} since start")
+        invidx = getInvIdx(data)
+        del data
+        print(f"Created Inverted Index. {time.time() - start} since start")
+        invidx = doGapEncoding(invidx)
 
-    invidx = doGapEncoding(invidx)
-
-    if compression == 0:
-        dictionary = dumpFiles_C0(invidx)
-    elif compression == 1:
-        dictionary = dumpFiles_C1(invidx)
-    elif compression == 2:
-        dictionary = dumpFiles_C2(invidx)
-    elif compression == 3:
         dictionary = dumpFiles_C3(invidx)
-    elif compression == 4:
-        dictionary = dumpFiles_C4(invidx)
+    else:
+        allfiles = os.listdir(coll_path)
+        int_to_docID = {}
+        numfiles = len(chunks(allfiles, FILES_PER_SPLIT))
+        numdocs = 1
+        docID_to_int = {}
+        int_to_docID = {}
+        vocab = set()
+
+        for i, chunked in enumerate(chunks(allfiles, FILES_PER_SPLIT)):
+            data = process_directory(coll_path, chunked)
+            numdocs = mapDocIDs(data, numdocs)
+            vocab = getVocab(vocab, data, stopwords)
+            invidx = getInvIdx(data)
+            invidx = doGapEncoding(invidx)
+            tempdict = dumpINV(invidx, i)
+            with open(os.path.join("tempfiles", f"dict{i}.json"), "w") as outfile:
+                json.dump(tempdict, outfile)
+            invidx.clear()
+            tempdict.clear()
+            del tempdict
+            del invidx
+
+        print(f"Processed data. {time.time() - start} since start")
+
+        if compression == 0:
+            dictionary = dumpFiles_C0()
+        elif compression == 1:
+            dictionary = dumpFiles_C1()
+        elif compression == 2:
+            dictionary = dumpFiles_C2()
+        elif compression == 4:
+            dictionary = dumpFiles_C4()
 
     dumpDicts(dictionary, int_to_docID)
 
