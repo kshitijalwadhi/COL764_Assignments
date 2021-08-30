@@ -545,6 +545,31 @@ def c4_decode_withpad(stream, k, numbits):
     return res
 
 
+def c2_decode_aux(x):
+    i = 0
+    n = len(x)
+    res = []
+    while(i < n):
+        t1 = ''
+        while(x[i] != '0'):
+            t1 += x[i]
+            i += 1
+        llx = len(t1) + 1
+        i += 1
+        lx_bin = '1' + x[i:i+llx-1]
+        i += (llx-1)
+        lx = bin_to_dec(lx_bin)
+        num_bin = '1' + x[i:i+lx-1]
+        i += (lx-1)
+        num = bin_to_dec(num_bin)
+        break
+    return num, i
+
+
+def c4_helper(arr):
+    return arr.index(min(arr))
+
+
 # Makes posting list file for C4 compression
 def dumpFiles_C4():
     dictionary = {}
@@ -562,7 +587,17 @@ def dumpFiles_C4():
         postings = gapEncodeList(postings)
         maxm = max(postings)
         k = int(math.log2(maxm))
-        allbytes = c4_encode_list(postings, k)
+        if k < 5:
+            kres = [1, 2, 3, 4]
+        else:
+            kres = [k-4, k-3, k-2, k-1]
+        temparr = []
+        for k in kres:
+            temp = c2_encoding(k) + c4_encode_list(postings, k)
+            bitsreq = len(temp) + (8-len(temp) % 8)
+            temparr.append(bitsreq)
+        k = kres[c4_helper(temparr)]
+        allbytes = c2_encoding(k)+c4_encode_list(postings, k)
         numbits = len(allbytes)
         if(numbits % 8 != 0):
             allbytes = allbytes + '0'*(8-numbits % 8)
@@ -571,7 +606,7 @@ def dumpFiles_C4():
         for chunk in chunks:
             temp.append(bin_to_dec(chunk))
         file.write(bytearray(temp))
-        dictionary[w] = [offset, numbits, k, len(temp)]
+        dictionary[w] = [offset, numbits]
         offset += len(temp)
     closeBinFiles(allidx)
     file.close()

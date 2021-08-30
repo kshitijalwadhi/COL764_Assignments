@@ -258,6 +258,27 @@ def padding(x):
     return '0'*(8-n) + x
 
 
+def c2_decode_aux(x):
+    i = 0
+    n = len(x)
+    res = []
+    while(i < n):
+        t1 = ''
+        while(x[i] != '0'):
+            t1 += x[i]
+            i += 1
+        llx = len(t1) + 1
+        i += 1
+        lx_bin = '1' + x[i:i+llx-1]
+        i += (llx-1)
+        lx = bin_to_dec(lx_bin)
+        num_bin = '1' + x[i:i+lx-1]
+        i += (lx-1)
+        num = bin_to_dec(num_bin)
+        break
+    return num, i
+
+
 # get posting list using C0
 def getPostings_C0(tokens,):
     for token in tokens:
@@ -349,15 +370,18 @@ def getPostings_C4(tokens):
     for token in tokens:
         start = dictionary[token][0]
         numbits = dictionary[token][1]
-        k = dictionary[token][2]
-        totallen = dictionary[token][3]
         f.seek(start)
         allbytes = ''
-        for i in range(0, totallen):
+        numiter = numbits
+        if(numiter % 8 != 0):
+            numiter += (8-numiter % 8)
+        numiter = int(numiter/8)
+        for i in range(0, numiter):
             temp = f.read(1)
             val = int.from_bytes(temp, "big")
             allbytes += padding(dec_to_binary(val))
-        doclist = c4_decode_withpad(allbytes, k, numbits)
+        k, jump = c2_decode_aux(allbytes)
+        doclist = c4_decode_withpad(allbytes[jump:], k, numbits-jump)
         res.append(undoGapEncode(doclist))
     return res
 
