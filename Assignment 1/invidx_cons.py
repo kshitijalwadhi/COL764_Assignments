@@ -457,22 +457,30 @@ def c3decodehelper(string):
 
 
 # makes posting list file for C3 compression
-def dumpFiles_C3(invidx):
+def dumpFiles_C3():
     dictionary = {}
+    alldicts = loadDictFiles()
+    allidx = loadBinFiles()
     fname = indexfile + '.idx'
     file = open(fname, "wb")
     offset = 0
     cont = []
-    for term, posting_list in invidx.items():
-        temp = c3encodehelper(posting_list)
+    for w in vocab:
+        postings = []
+        for i, tempdict in enumerate(alldicts):
+            if w in tempdict:
+                reader = allidx[i]
+                postings.extend(getPosting(reader, w, alldicts[i]))
+        postings = gapEncodeList(postings)
+        temp = c3encodehelper(postings)
         cont.append(temp)
-        invidx[term] = []
         length = len(temp)
-        dictionary[term] = [offset, length]
+        dictionary[w] = [offset, length]
         offset += length
     allbytes = "".join(cont)
     file.write(snappy.compress(allbytes))
     file.close()
+    closeBinFiles(allidx)
     return dictionary
 
 
@@ -663,52 +671,40 @@ if __name__ == "__main__":
     stopwords = processStopwords(stopwordfile)
     xmlTags = getXMLtags(xmltagsinfo)
 
-    if compression == 3:
-        data = process_directory_old(coll_path)
-        print(f"Processed data. {time.time() - start} since start")
+    allfiles = os.listdir(coll_path)
+    int_to_docID = {}
+    numfiles = len(chunks(allfiles, FILES_PER_SPLIT))
+    numdocs = 1
+    docID_to_int = {}
+    int_to_docID = {}
+    vocab = set()
 
-        docID_to_int, int_to_docID = mapDocIDs_old(data)
-        vocab = getVocab_old(data, stopwords)
-
+    for i, chunked in enumerate(chunks(allfiles, FILES_PER_SPLIT)):
+        data = process_directory(coll_path, chunked)
+        numdocs = mapDocIDs(data, numdocs)
+        vocab = getVocab(vocab, data, stopwords)
         invidx = getInvIdx(data)
-        del data
-        print(f"Created Inverted Index. {time.time() - start} since start")
         invidx = doGapEncoding(invidx)
+        tempdict = dumpINV(invidx, i)
+        with open(os.path.join("tempfiles", f"dict{i}.json"), "w") as outfile:
+            json.dump(tempdict, outfile)
+        invidx.clear()
+        tempdict.clear()
+        del tempdict
+        del invidx
 
-        dictionary = dumpFiles_C3(invidx)
-    else:
-        allfiles = os.listdir(coll_path)
-        int_to_docID = {}
-        numfiles = len(chunks(allfiles, FILES_PER_SPLIT))
-        numdocs = 1
-        docID_to_int = {}
-        int_to_docID = {}
-        vocab = set()
+    print(f"Processed data. {time.time() - start} since start")
 
-        for i, chunked in enumerate(chunks(allfiles, FILES_PER_SPLIT)):
-            data = process_directory(coll_path, chunked)
-            numdocs = mapDocIDs(data, numdocs)
-            vocab = getVocab(vocab, data, stopwords)
-            invidx = getInvIdx(data)
-            invidx = doGapEncoding(invidx)
-            tempdict = dumpINV(invidx, i)
-            with open(os.path.join("tempfiles", f"dict{i}.json"), "w") as outfile:
-                json.dump(tempdict, outfile)
-            invidx.clear()
-            tempdict.clear()
-            del tempdict
-            del invidx
-
-        print(f"Processed data. {time.time() - start} since start")
-
-        if compression == 0:
-            dictionary = dumpFiles_C0()
-        elif compression == 1:
-            dictionary = dumpFiles_C1()
-        elif compression == 2:
-            dictionary = dumpFiles_C2()
-        elif compression == 4:
-            dictionary = dumpFiles_C4()
+    if compression == 0:
+        dictionary = dumpFiles_C0()
+    elif compression == 1:
+        dictionary = dumpFiles_C1()
+    elif compression == 2:
+        dictionary = dumpFiles_C2()
+    elif compression == 3:
+        dictionary = dumpFiles_C3()
+    elif compression == 4:
+        dictionary = dumpFiles_C4()
 
     dumpDicts(dictionary, int_to_docID)
 
