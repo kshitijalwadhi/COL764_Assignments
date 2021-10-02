@@ -1,16 +1,17 @@
+# coding: utf-8
 from bs4 import BeautifulSoup
 import re
 import os
 from PorterStemmer import *
-from tqdm import tqdm
 import snappy
 import mmap
 import math
 import json
 import sys
+#import time
 ps = PorterStemmer()
 
-delim = '''[ ',(){}.:;"’`\n]'''
+delim = '''[ ',(){}.:;"`\n]'''
 
 
 # returns tokens after stemming in the form of a list
@@ -211,8 +212,6 @@ def c4_encode_list(arr, k):
 
 # does C4 decoding with numbits given
 def c4_decode_withpad(stream, k, numbits):
-    if(len(stream) < numbits):
-        print("wow")
     i = 0
     b = pow(2, k)
     res = []
@@ -415,6 +414,8 @@ if __name__ == "__main__":
     indexfile = sys.argv[3]
     dictfile = sys.argv[4]
 
+    #start = time.time()
+
     with open(dictfile, "r") as jsonfile:
         tempdict = json.load(jsonfile)
 
@@ -450,6 +451,13 @@ if __name__ == "__main__":
             docno = int_to_docID[str(doc)]
             l = "Q"+str(qid) + " " + docno + " 1.0\n"
             res_file.write(l)
+
+    #end = time.time()
+
+    # print("Time taken to answer the queries: ", end-start)
+    # print("Total number of queries: ", len(lines))
+    # print("Average time taken per query: ", (end-start)/len(lines))
+
     res_file.close()
     queries.close()
     f.close()

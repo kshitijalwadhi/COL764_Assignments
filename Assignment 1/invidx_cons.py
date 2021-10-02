@@ -1,18 +1,18 @@
+# coding: utf-8
 from bs4 import BeautifulSoup
 import re
 import os
 from PorterStemmer import *
-from tqdm import tqdm
 import snappy
 import mmap
 import math
 import json
 import sys
-import time
+#import time
 ps = PorterStemmer()
 
-delim = '''[ ',(){}.:;"’`\n]'''
-FILES_PER_SPLIT = 100
+delim = '''[ ',(){}.:;"`\n]'''
+FILES_PER_SPLIT = 250
 
 
 # returns tokens after stemming in the form of a list (CHECKED)
@@ -34,21 +34,20 @@ def processStopwords(filepath):
     # for line in lines:
     #     text += (line + " ")
     text = " ".join(lines)
-    res = re.split(delim, text)
+    res = re.split('''[ \n]''', text)
     temp = []
     for w in res:
         if len(w) > 0:
-            temp.append(ps.stem(w.lower(), 0, len(w)-1))
+            temp.append(w)
     res = set(temp)
     return res
 
 
 # check if word present in stopwords
 def checkStopwords(word, stopwords):
-    if stopwords.get(word) is not None:
+    if word in stopwords:
         return True
-    else:
-        return False
+    return False
 
 
 # get list of XML tags present in the xml-tags-info file
@@ -70,7 +69,7 @@ def getXMLtags(filepath):
 
 def process_directory(dir_path, filearr):
     data = {}
-    for filename in tqdm(filearr):
+    for filename in (filearr):
         full_path = os.path.join(dir_path, filename)
         file = open(full_path, "r")
         contents = file.read()
@@ -89,6 +88,8 @@ def process_directory(dir_path, filearr):
                     words = re.split(delim, text)
                     for w in words:
                         if(len(w) > 0):
+                            if checkStopwords(w, stopwords):
+                                continue
                             res.append(ps.stem(w.lower(), 0, len(w)-1))
             data[docnum] = res
     return data
@@ -97,7 +98,7 @@ def process_directory(dir_path, filearr):
 # maps docnum to list of tokens for all files in directory
 def process_directory_old(dir_path):
     data = {}
-    for filename in tqdm(os.listdir(dir_path)):
+    for filename in (os.listdir(dir_path)):
         full_path = os.path.join(dir_path, filename)
         file = open(full_path, "r")
         contents = file.read()
@@ -116,6 +117,8 @@ def process_directory_old(dir_path):
                     words = re.split(delim, text)
                     for w in words:
                         if(len(w) > 0):
+                            if checkStopwords(w, stopwords):
+                                continue
                             res.append(ps.stem(w.lower(), 0, len(w)-1))
             data[docnum] = res
     return data
@@ -127,8 +130,8 @@ def getVocab(vocab, data, stopwords):
     for doc, token_list in data.items():
         tokens += token_list
     tokens = set(tokens)
-    for w in stopwords:
-        tokens.discard(w)
+    # for w in stopwords:
+    #     tokens.discard(w)
     vocab.update(tokens)
     return vocab
 
@@ -138,8 +141,8 @@ def getVocab_old(data, stopwords):
     for doc, token_list in data.items():
         tokens += token_list
     tokens = set(tokens)
-    for w in stopwords:
-        tokens.discard(w)
+    # for w in stopwords:
+    #     tokens.discard(w)
     return tokens
 
 
@@ -701,7 +704,7 @@ if __name__ == "__main__":
     compression = int(sys.argv[4])
     xmltagsinfo = sys.argv[5]
 
-    start = time.time()
+    #start = time.time()
 
     stopwords = processStopwords(stopwordfile)
     xmlTags = getXMLtags(xmltagsinfo)
@@ -728,7 +731,9 @@ if __name__ == "__main__":
         del tempdict
         del invidx
 
-    print(f"Processed data. {time.time() - start} since start")
+    #print(f"Processed data. {time.time() - start} since start")
+
+    #mid = time.time()
 
     if compression == 0:
         dictionary = dumpFiles_C0()
@@ -743,5 +748,8 @@ if __name__ == "__main__":
 
     dumpDicts(dictionary, int_to_docID)
 
-    end = time.time()
-    print(end-start)
+    #end = time.time()
+
+    #print("Time taken in compression: ", mid-start)
+
+    #print("Total time taken is: ", end-start)
