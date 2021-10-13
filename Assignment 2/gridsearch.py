@@ -15,6 +15,8 @@ import json
 from PorterStemmer import *
 #from nltk.stem import PorterStemmer
 #from nltk.tokenize import word_tokenize
+import random
+random.seed(42)
 ps = PorterStemmer()
 
 stop_words = set(stopwords.words('english'))
@@ -219,34 +221,35 @@ def getAvgNDCG():
     return all_scores, total/len(top100_dict)
 
 
+def getRandomDocs(num):
+    elems = random.sample(list(filemap), num)
+    return elems
+
+
 def rocchio_updateQueries(alpha, beta, gamma):
     updated_queries = []
-    for i, q_orig in (enumerate(get_queries())):
+    irrelvec = np.zeros(len(vocab))
+    randomdocs = getRandomDocs(100)
+    irrel_vecarr = []
+    for doc in randomdocs:
+        irrel_vecarr.append(getDocVector(doc))
+    for v in irrel_vecarr:
+        irrelvec += v
+    if len(irrel_vecarr) > 0:
+        irrelvec /= len(irrel_vecarr)
+    for i, q_orig in tqdm(enumerate(get_queries())):
         q = q_orig.lower()
         qv0 = getQueryVector(q)
         qno = i+1
         top100docs = top100_dict[qno]
         relvec = np.zeros(len(vocab))
-        irrelvec = np.zeros(len(vocab))
         rel_vecarr = []
-        irrel_vecarr = []
         for doc in top100docs:
-            if doc in rel_dict[qno]:
-                rel = rel_dict[qno][doc]
-            else:
-                rel = 0
-            if rel > 0:
-                rel_vecarr.append(getDocVector(doc))
-            else:
-                irrel_vecarr.append(getDocVector(doc))
+            rel_vecarr.append(getDocVector(doc))
         for v in rel_vecarr:
             relvec += v
-        for v in irrel_vecarr:
-            irrelvec += v
         if len(rel_vecarr) > 0:
             relvec /= len(rel_vecarr)
-        if len(irrel_vecarr) > 0:
-            irrelvec /= len(irrel_vecarr)
         qnew = np.multiply(qv0, alpha) + np.multiply(relvec, beta) - np.multiply(irrelvec, gamma)
         qnew = np.where(qnew < 0, 0, qnew)
         updated_queries.append(qnew)
@@ -256,7 +259,7 @@ def rocchio_updateQueries(alpha, beta, gamma):
 def rocchio_getNDCG(updated_queries):
     total = 0
     allscores = []
-    for i, q in (enumerate(updated_queries)):
+    for i, q in tqdm(enumerate(updated_queries)):
         qno = i+1
         doc_score_dict = {}
         top100docs = top100_dict[qno]
