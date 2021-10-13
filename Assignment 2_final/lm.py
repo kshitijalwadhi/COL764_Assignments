@@ -12,6 +12,7 @@ import math
 import json
 import sys
 import time
+import csv
 import json
 from PorterStemmer import *
 ps = PorterStemmer()
@@ -80,16 +81,15 @@ def get_tf_dict(docid):
     tf_dict = {}
     paths = filemap[docid]
     alltext = ""
-    for path in paths.split("; "):
-        if(path == "nan"):
-            continue
-        datapath = os.path.join(data_dir, path)
-        with open(datapath) as data:
-            data_dict = json.load(data)
-            for section in data_dict['body_text']:
-                section_text = section['text']
-                alltext += section_text
-                alltext += " "
+    if paths != "":
+        for path in paths.split("; "):
+            datapath = os.path.join(data_dir, path)
+            with open(datapath) as data:
+                data_dict = json.load(data)
+                for section in data_dict['body_text']:
+                    section_text = section['text']
+                    alltext += section_text
+                    alltext += " "
     tokens = getTokensFromText(alltext)
     for token in tokens:
         if token not in tf_dict:
@@ -101,18 +101,18 @@ def get_tf_dict(docid):
 
 def get_filepath():
     filemap = {}
-    meta_df2 = pd.read_csv(metadata, low_memory=False)
-    meta_df2 = meta_df2[['cord_uid', 'title', 'abstract', 'pdf_json_files', 'pmc_json_files']]
-    meta_df2['pdf_json_files'] = meta_df2['pdf_json_files'].astype(str)
-    meta_df2['pmc_json_files'] = meta_df2['pmc_json_files'].astype(str)
-    for row in tqdm(meta_df2.itertuples(), total=meta_df2.shape[0]):
-        uid = row.cord_uid
-        alltext = ""
-        if row.pmc_json_files:
-            paths = row.pmc_json_files
-        elif row.pdf_json_files:
-            paths = row.pdf_json_files
-        filemap[uid] = paths
+
+    with open(metadata, 'r', encoding='utf-8') as metafile:
+        reader = csv.DictReader(metafile)
+        for row in tqdm(reader, total=meta_df.shape[0]):
+            uid = row['cord_uid']
+            paths = ""
+            alltext = ""
+            if row['pmc_json_files']:
+                paths = row['pmc_json_files']
+            elif row['pdf_json_files']:
+                paths = row['pdf_json_files']
+            filemap[uid] = paths
     return filemap
 
 
