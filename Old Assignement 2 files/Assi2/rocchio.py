@@ -149,7 +149,8 @@ def getSim(queryVec, docVec):
 
 
 def get_queries():
-    with open(os.path.join(data_dir, topics_file), "r") as file:
+    # with open(os.path.join(data_dir, topics_file), "r") as file:
+    with open(topics_file, "r") as file:
         content = file.readlines()
         content = "".join(content)
         bs_content = BeautifulSoup(content, "lxml")
@@ -162,7 +163,8 @@ def get_queries():
 
 def get_top100():
     top100_dict = {}
-    with open(os.path.join(data_dir, top100_file), "r") as file:
+    # with open(os.path.join(data_dir, top100_file), "r") as file:
+    with open(top100_file, 'r') as file:
         for x in file:
             line = x.split(" ")
             if(len(line) > 1):
@@ -295,14 +297,14 @@ if __name__ == "__main__":
     meta_df['pdf_json_files'] = meta_df['pdf_json_files'].astype(str)
     meta_df['pmc_json_files'] = meta_df['pmc_json_files'].astype(str)
 
-    # idf_dict, filemap = get_idf_dict_new()
-    # dumpdicts(idf_dict, filemap)
+    idf_dict, filemap = get_idf_dict_new()
+    dumpdicts(idf_dict, filemap)
 
-    print("Loading dictionary files")
-    with open("idf_dict_new.json", "r") as jsonfile:
-        idf_dict = json.load(jsonfile)
-    with open("filemap_new.json", "r") as jsonfile:
-        filemap = json.load(jsonfile)
+    # print("Loading dictionary files")
+    # with open("idf_dict_new.json", "r") as jsonfile:
+    #     idf_dict = json.load(jsonfile)
+    # with open("filemap_new.json", "r") as jsonfile:
+    #     filemap = json.load(jsonfile)
 
     print("Creating vocab")
     vocab = create_vocab_dict(idf_dict)
@@ -314,6 +316,7 @@ if __name__ == "__main__":
     irrelvec = getIrrelVec()
 
     print("Updating queries")
-    updated_queries = rocchio_updateQueriesTest(1.0, 0.75, 0.15)
+    #updated_queries = rocchio_updateQueriesTest(1.0, 0.75, 0.15)
+    updated_queries = rocchio_updateQueriesTest(2.0, 0.15, 0.2)
 
     getUpdatedOrder(updated_queries)

@@ -1,6 +1,7 @@
 # coding: utf-8
 from nltk.corpus import stopwords
 import random
+from tqdm import tqdm
 from bs4 import BeautifulSoup
 import numpy as np
 import pandas as pd
@@ -35,7 +36,8 @@ def getTokensFromText(text):
 
 
 def get_queries():
-    with open(os.path.join(data_dir, topics_file), "r") as file:
+    # with open(os.path.join(data_dir, topics_file), "r") as file:
+    with open(topics_file, "r") as file:
         content = file.readlines()
         content = "".join(content)
         bs_content = BeautifulSoup(content, "lxml")
@@ -63,7 +65,8 @@ def get_relevances():
 
 def get_top100():
     top100_dict = {}
-    with open(os.path.join(data_dir, top100_file), "r") as file:
+    # with open(os.path.join(data_dir, top100_file), "r") as file:
+    with open(top100_file, 'r') as file:
         for x in file:
             line = x.split(" ")
             if(len(line) > 1):
@@ -103,7 +106,7 @@ def get_filepath():
 
     with open(metadata, 'r', encoding='utf-8') as metafile:
         reader = csv.DictReader(metafile)
-        for row in reader:
+        for row in tqdm(reader, total=meta_df.shape[0]):
             uid = row['cord_uid']
             paths = ""
             alltext = ""
@@ -256,7 +259,7 @@ def getQueryVector(mode, query, qno, k, mu, vocab):
 def LM_updateQueries(mode, k, mu):
     updated_queries = []
     expansion_terms = []
-    for i, q_orig in (enumerate(get_queries())):
+    for i, q_orig in tqdm(enumerate(get_queries())):
         q = q_orig.lower()
         qno = i+1
         vocab = vocab_dict[qno]
@@ -308,7 +311,7 @@ def getSim(queryVec, docVec):
 def LM_getNDCG(updated_queries):
     total = 0
     allscores = []
-    for i, q in (enumerate(updated_queries)):
+    for i, q in tqdm(enumerate(updated_queries)):
         qno = i+1
         freq_map, doclen_map = getFreqMap(qno)
         doc_score_dict = {}
@@ -327,7 +330,7 @@ def LM_getNDCG(updated_queries):
 
 def getUpdatedOrder(updated_queries):
     res_file = open(output_file, "w")
-    for i, q in (enumerate(updated_queries)):
+    for i, q in tqdm(enumerate(updated_queries)):
         qno = i+1
         freq_map, doclen_map = getFreqMap(qno)
         doc_score_dict = {}
@@ -372,29 +375,29 @@ if __name__ == "__main__":
     expansion_file = sys.argv[6]
 
     metadata = os.path.join(data_dir, "metadata.csv")
-    #print("Loading Meta-data")
+    print("Loading Meta-data")
     meta_df = pd.read_csv(metadata, low_memory=False)
-    #print("Meta-data loaded")
+    print("Meta-data loaded")
     meta_df = meta_df[['cord_uid', 'title', 'abstract', 'pdf_json_files', 'pmc_json_files']]
     meta_df['pdf_json_files'] = meta_df['pdf_json_files'].astype(str)
     meta_df['pmc_json_files'] = meta_df['pmc_json_files'].astype(str)
 
-    #print("Creating Filemap")
+    print("Creating Filemap")
     filemap = get_filepath()
-    #print("Creating top100 dict")
+    print("Creating top100 dict")
     top100_dict = get_top100()
     # print("Creating relevance dict")
     # rel_dict = get_relevances()
 
-    #print("Processing queries file")
+    print("Processing queries file")
     q_map = {}
     for i, q_orig in (enumerate(get_queries())):
         q = q_orig.lower()
         q_map[i+1] = q
 
-    #print("Processing queries")
+    print("Processing queries")
     vocab_dict = {}
-    for i, q_orig in (enumerate(get_queries())):
+    for i, q_orig in tqdm(enumerate(get_queries())):
         qno = i+1
         freq_map, doclen_map = getFreqMap(qno)
         vocab = {}

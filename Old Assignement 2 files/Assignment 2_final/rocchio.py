@@ -1,6 +1,7 @@
 # coding: utf-8
 from nltk.corpus import stopwords
 import random
+from tqdm import tqdm
 from bs4 import BeautifulSoup
 import numpy as np
 import pandas as pd
@@ -41,7 +42,7 @@ def get_idf_dict_new():
 
     with open(metadata, 'r', encoding='utf-8') as metafile:
         reader = csv.DictReader(metafile)
-        for row in reader:
+        for row in tqdm(reader, total=meta_df.shape[0]):
             uid = row['cord_uid']
             paths = ""
             alltext = ""
@@ -224,7 +225,7 @@ def getIrrelVec():
 
 def rocchio_updateQueriesTest(alpha, beta, gamma):
     updated_queries = []
-    for i, q_orig in (enumerate(get_queries())):
+    for i, q_orig in tqdm(enumerate(get_queries())):
         q = q_orig.lower()
         qv0 = getQueryVector(q)
         qno = i+1
@@ -246,7 +247,7 @@ def rocchio_updateQueriesTest(alpha, beta, gamma):
 def rocchio_getNDCG(updated_queries):
     total = 0
     allscores = []
-    for i, q in (enumerate(updated_queries)):
+    for i, q in tqdm(enumerate(updated_queries)):
         qno = i+1
         doc_score_dict = {}
         top100docs = top100_dict[qno]
@@ -263,7 +264,7 @@ def rocchio_getNDCG(updated_queries):
 
 def getUpdatedOrder(updated_queries):
     res_file = open(output_file, "w")
-    for i, q in (enumerate(updated_queries)):
+    for i, q in tqdm(enumerate(updated_queries)):
         qno = i+1
         doc_score_dict = {}
         top100docs = top100_dict[qno]
@@ -287,23 +288,23 @@ if __name__ == "__main__":
     output_file = sys.argv[4]
 
     metadata = os.path.join(data_dir, "metadata.csv")
-    #print("Loading Meta-data")
+    print("Loading Meta-data")
     meta_df = pd.read_csv(metadata, low_memory=False)
-    #print("Meta-data loaded")
+    print("Meta-data loaded")
     meta_df = meta_df[['cord_uid', 'title', 'abstract', 'pdf_json_files', 'pmc_json_files']]
     meta_df['pdf_json_files'] = meta_df['pdf_json_files'].astype(str)
     meta_df['pmc_json_files'] = meta_df['pmc_json_files'].astype(str)
 
     idf_dict, filemap = get_idf_dict_new()
-    #dumpdicts(idf_dict, filemap)
+    dumpdicts(idf_dict, filemap)
 
-    #print("Loading dictionary files")
-    # with open("idf_dict.json", "r") as jsonfile:
+    # print("Loading dictionary files")
+    # with open("idf_dict_new.json", "r") as jsonfile:
     #     idf_dict = json.load(jsonfile)
-    # with open("filemap.json", "r") as jsonfile:
+    # with open("filemap_new.json", "r") as jsonfile:
     #     filemap = json.load(jsonfile)
 
-    #print("Creating vocab")
+    print("Creating vocab")
     vocab = create_vocab_dict(idf_dict)
 
     N = len(filemap)
@@ -312,8 +313,7 @@ if __name__ == "__main__":
 
     irrelvec = getIrrelVec()
 
-    #print("Updating queries")
-    #updated_queries = rocchio_updateQueriesTest(1.0, 0.75, 0.15)
-    updated_queries = rocchio_updateQueriesTest(2.0, 0.15, 0.2)
+    print("Updating queries")
+    updated_queries = rocchio_updateQueriesTest(1.0, 0.75, 0.15)
 
     getUpdatedOrder(updated_queries)

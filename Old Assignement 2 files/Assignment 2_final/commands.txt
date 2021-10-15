@@ -1,0 +1,10 @@
+python rocchio.py covid19-topics.xml t40-top-100.txt C:\Files\col764-a2-release\col764-ass2-release\data rocout.txt
+
+python lm.py rm1 covid19-topics.xml t40-top-100.txt C:\Files\col764-a2-release\col764-ass2-release\data lm1out.txt lm1exp.txt
+
+python lm.py rm2 covid19-topics.xml t40-top-100.txt C:\Files\col764-a2-release\col764-ass2-release\data lm2out.txt lm2exp.txt
+
+
+sh rocchio_rerank.sh /mnt/c/Files/col764-a2-release/col764-ass2-release/data/covid19-topics.xml /mnt/c/Files/col764-a2-release/col764-ass2-release/data/t40-top-100.txt /mnt/c/Files/col764-a2-release/col764-ass2-release/data rocout.txt
+
+sh lm_rerank.sh rm1 /mnt/c/Files/col764-a2-release/col764-ass2-release/data/covid19-topics.xml /mnt/c/Files/col764-a2-release/col764-ass2-release/data/t40-top-100.txt /mnt/c/Files/col764-a2-release/col764-ass2-release/data lm1out.txt lm1exp.txt
