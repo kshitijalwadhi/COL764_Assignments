@@ -2,7 +2,6 @@
 import networkx as nx
 import numpy as np
 import pandas as pd
-import nltk
 import re
 import os
 import math
@@ -11,23 +10,21 @@ import sys
 import time
 import json
 import re
-import csv
-from tqdm import tqdm
 from itertools import combinations
 from PorterStemmer import *
 ps = PorterStemmer()
-delim = '''[ ',(){}.@#+!_~&*%^=`|$:;"`\n]'''
 delims = [' ', ",", ".", ":", ";", "'", "\"", "@", "#", "+", "!", "_", "~", "&", "*", "%", "^", "=", "`", "|", "$", "\n", "(", ")", ">", "<"]
 
-show_progress = True
-consider_double = True
+bool_take_arguments = True
+# if TRUE, ignore the rest (gets overriden by command line argument)
+show_progress = False
+consider_double = False
 data_dir = r"C:\Files\a3data\20news-bydate-test"
 sim_func = 1  # 1: cosine, 2: jaccard
 fname_edges = f"similarity_{'cosine' if sim_func==1 else 'jaccard'}.txt"
 fname_pagerank = f"pagerank_{'cosine' if sim_func==1 else 'jaccard'}.txt"
-bool_dump_page_rank = True
+bool_dump_page_rank = False
 bool_dump_both = False
-bool_take_arguments = False
 
 
 def getTokensFromText(string):
@@ -41,7 +38,7 @@ def getTokensFromText(string):
 
 def process_data():
     data = {}
-    for topic in tqdm(os.listdir(data_dir), disable=not show_progress):
+    for topic in os.listdir(data_dir):
         topic_path = os.path.join(data_dir, topic)
         for uid in os.listdir(topic_path):
             full_path = os.path.join(topic_path, uid)
@@ -54,7 +51,7 @@ def process_data():
 
 def get_idf_dict_new():
     idf_dict = {}
-    for uid in tqdm(data, disable=not show_progress):
+    for uid in data:
         tokens = set(data[uid])
         for token in tokens:
             if token not in idf_dict:
@@ -101,7 +98,7 @@ def getDocVector(docid):
 
 def precomputeDocVecs():
     vecs = {}
-    for uid in tqdm(alluids):
+    for uid in alluids:
         vec = getDocVector(uid)
         vecs[uid] = vec
     return vecs
@@ -148,7 +145,7 @@ def getJacobianSim(uid1, uid2):
 def getWeightedEdges(similarity):
     edges = list(combinations(alluids, 2))
     weighted_edges = []
-    for e in tqdm(edges, disable=not show_progress):
+    for e in edges:
         v1 = e[0]
         v2 = e[1]
         if similarity == 1:
@@ -165,7 +162,7 @@ def dump_edges(edges, filename):
     with open(filename, 'w') as f:
         for e in edges:
             if e[2] > 0.0:
-                f.write(str(e[0]) + ' ' + str(e[1]) + ' ' + str(round(e[2], 4)) + '\n')
+                f.write(str(e[0]) + '\t' + str(e[1]) + '\t' + str(round(e[2], 4)) + '\n')
 
 
 def create_graph(weighted_edges):
@@ -209,22 +206,6 @@ if __name__ == "__main__":
     uid_to_num = createUIDtoNumMapping()
     dotProdMat = getDotProdMat()
     weights = getWeightedEdges(sim_func)
-    G = create_graph(weights)
-    pagerank = get_pagerank(G)
+    # G = create_graph(weights)
+    # pagerank = get_pagerank(G)
     dump_edges(weights, fname_edges)
-    if bool_dump_page_rank:
-        dump_pagerank(pagerank, fname_pagerank)
-
-    del pagerank
-    del weights
-
-    if bool_dump_both:
-        sim_func = 1 if sim_func == 2 else 2
-        fname_edges = f"similarity_{'cosine' if sim_func==1 else 'jaccard'}.txt"
-        fname_pagerank = f"pagerank_{'cosine' if sim_func==1 else 'jaccard'}.txt"
-        weights = getWeightedEdges(sim_func)
-        G = create_graph(weights)
-        pagerank = get_pagerank(G)
-        dump_edges(weights, fname_edges)
-        if bool_dump_page_rank:
-            dump_pagerank(pagerank, fname_pagerank)

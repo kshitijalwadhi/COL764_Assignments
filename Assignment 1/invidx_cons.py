@@ -12,7 +12,7 @@ import sys
 ps = PorterStemmer()
 
 delim = '''[ ',(){}.:;"`\n]'''
-FILES_PER_SPLIT = 250
+FILES_PER_SPLIT = 500
 
 
 # returns tokens after stemming in the form of a list (CHECKED)
